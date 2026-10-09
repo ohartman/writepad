@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#24272d" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="A plain, distraction-free text editor for exams on Chromebook kiosks. Saves and prints. Nothing else.">
+  <title>WritePad</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="48x48" href="./icons/favicon-48.png">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<div class="app" id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="name">WritePad</span>
+      <span class="exam-title" id="exam-title"></span>
+    </div>
+
+    <div class="fields" id="fields">
+      <label class="name"><span>Name</span>
+        <input id="student-name" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Student name" maxlength="80">
+      </label>
+      <label class="id"><span>ID</span>
+        <input id="student-id" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Student ID" maxlength="40" inputmode="numeric">
+      </label>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary" id="btn-save" type="button" title="Save (Ctrl+S)">Save</button>
+      <button class="btn" id="btn-print" type="button" title="Print (Ctrl+P)">Print</button>
+      <details class="menu" id="menu">
+        <summary class="btn icon" aria-label="Settings and more" title="Settings and more">&#8943;</summary>
+        <div class="menu-panel">
+          <div class="menu-row">
+            <span>Text size</span>
+            <div class="group">
+              <button class="btn icon" type="button" id="font-smaller" aria-label="Smaller text" title="Ctrl+Minus">A&minus;</button>
+              <span id="font-size-label" aria-live="polite">22</span>
+              <button class="btn icon" type="button" id="font-larger" aria-label="Larger text" title="Ctrl+Plus">A+</button>
+            </div>
+          </div>
+          <div class="menu-row">
+            <span>Font</span>
+            <select id="font-family" aria-label="Font">
+              <option value="sans">Sans-serif</option>
+              <option value="serif">Serif</option>
+              <option value="mono">Monospace</option>
+            </select>
+          </div>
+          <div class="menu-row">
+            <span>Theme</span>
+            <select id="theme" aria-label="Theme">
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
+          <div class="menu-sep"></div>
+          <button class="btn full" type="button" id="btn-help">Help &amp; shortcuts</button>
+          <button class="btn full" type="button" id="btn-history">Recover a previous document</button>
+          <div class="menu-sep"></div>
+          <button class="btn full danger" type="button" id="btn-finish">Finish &amp; clear for next student</button>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <main class="editor-wrap">
+    <textarea id="editor"
+              aria-label="Exam response"
+              spellcheck="false"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="sentences"
+              placeholder="Start typing here. Your work is saved on this device as you type."></textarea>
+  </main>
+
+  <footer class="statusbar" aria-live="polite">
+    <span id="stat-words">0 words</span>
+    <span id="stat-chars">0 characters</span>
+    <span id="stat-lines">1 line</span>
+    <span class="spacer"></span>
+    <span id="stat-dirty" class="dirty"></span>
+    <span id="stat-autosave">Not yet saved</span>
+    <span id="stat-battery"></span>
+    <span id="stat-clock"></span>
+  </footer>
+</div>
+
+<!-- Printed output (hidden on screen) -->
+<div id="print-view" aria-hidden="true">
+  <div class="print-header">
+    <div>
+      <strong id="print-name"></strong>
+      <span id="print-id"></span>
+    </div>
+    <div>
+      <span id="print-title"></span>
+      <span id="print-date"></span>
+    </div>
+  </div>
+  <div class="print-body" id="print-body"></div>
+  <div class="print-footer" id="print-footer"></div>
+</div>
+
+<!-- Recovery dialog -->
+<dialog id="dlg-recover" aria-labelledby="dlg-recover-title">
+  <div class="dlg">
+    <h2 id="dlg-recover-title">Unsaved work found on this device</h2>
+    <p id="recover-summary"></p>
+    <p class="muted">If this is not yours, choose “Start fresh”. The previous document is kept in “Recover a previous document” under the menu in case it is needed.</p>
+    <div class="row">
+      <button class="btn" type="button" id="recover-discard">Start fresh</button>
+      <button class="btn primary" type="button" id="recover-restore" autofocus>Restore my work</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Finish confirmation -->
+<dialog id="dlg-finish" aria-labelledby="dlg-finish-title">
+  <div class="dlg">
+    <h2 id="dlg-finish-title">Finish and clear?</h2>
+    <p>This clears the editor and the name and ID fields so the next student can start. Make sure you have <strong>saved or printed</strong> your work first.</p>
+    <p class="muted" id="finish-warning"></p>
+    <div class="row">
+      <button class="btn" type="button" id="finish-cancel" autofocus>Cancel</button>
+      <button class="btn danger" type="button" id="finish-confirm">Clear everything</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Help dialog -->
+<dialog id="dlg-help" aria-labelledby="dlg-help-title">
+  <div class="dlg">
+    <h2 id="dlg-help-title">WritePad help</h2>
+    <p>Type your response in the big box. Your work is saved on this device automatically as you type, so a restart will not lose it. When you are done, use <strong>Save</strong> to save a text file, or <strong>Print</strong>.</p>
+    <table>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>S</kbd></td><td>Save as a text file</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>P</kbd></td><td>Print</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>&minus;</kbd></td><td>Larger or smaller text</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd> / <kbd>Y</kbd></td><td>Undo / redo</td></tr>
+      <tr><td><kbd>F1</kbd></td><td>This help</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Close a dialog</td></tr>
+    </table>
+    <p class="muted" id="help-version"></p>
+    <div class="row">
+      <button class="btn primary" type="button" id="help-close" autofocus>Close</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- History dialog -->
+<dialog id="dlg-history" aria-labelledby="dlg-history-title">
+  <div class="dlg">
+    <h2 id="dlg-history-title">Recover a previous document</h2>
+    <p class="muted">The last few documents cleared on this device. Restoring one replaces what is in the editor now, so save first if needed.</p>
+    <div class="history-list" id="history-list"></div>
+    <div class="row">
+      <button class="btn" type="button" id="history-close" autofocus>Close</button>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="./app.js"></script>
+</body>
+</html>
